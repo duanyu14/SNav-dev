@@ -48,6 +48,9 @@
       <span class="wind">{{ weatherData?.windDir ?? "N/A" }}</span>
       <span v-if="weatherData?.windLevel" class="wind-level"> {{ weatherData.windLevel }} 级 </span>
     </div>
+
+    <!-- ⭐ 一言组件 ⭐ -->
+    <Hitokoto />
   </div>
 </template>
 
@@ -56,6 +59,7 @@ import { getCurrentTime } from "@/utils/timeTools";
 import { ref, onMounted, onBeforeUnmount, watch } from "vue";
 import { statusStore, setStore } from "@/stores";
 import { getAdcode, getWeather } from "@/api";
+import Hitokoto from "@/components/Hitokoto.vue";
 
 const set = setStore();
 const status = statusStore();
