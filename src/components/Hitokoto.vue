@@ -22,7 +22,7 @@ const fetchHitokoto = async () => {
     if (res && res.hitokoto) {
       hitokotoText.value = res.hitokoto;
     } else {
-      hitokotoText.value = "获取一言失败";
+      hitokotoText.value = "一言获取失败";
     }
   } catch (error) {
     console.error("一言获取失败", error);
