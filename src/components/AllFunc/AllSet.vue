@@ -262,12 +262,12 @@ import {
   NSlider,
 } from "naive-ui";
 import { storeToRefs } from "pinia";
-import { setStore, statusStore } from "@/stores";
+import { setStore, statusStore, siteStore } from "@/stores";  // ✅ 合并
 import identifyInput from "@/utils/identifyInput";
 
-import { setStore, siteStore } from "@/stores";
 const set = setStore();
-const site = siteStore(); // 新增
+const status = statusStore();
+const site = siteStore();   // 新增
 const {
   themeType,
   backgroundType,
