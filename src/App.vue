@@ -2,7 +2,7 @@
   <Provider>
     <!-- 壁纸 -->
     <Cover @loadComplete="loadComplete" />
-    <!-- 主界面 -->
+    <!-- 主界面 / 加载界面切换 -->
     <Transition name="fade" mode="out-in">
       <main
         v-if="status.imgLoadStatus"
@@ -18,7 +18,7 @@
         <SearchInp @contextmenu.stop />
         <AllFunc @contextmenu.stop />
         <Footer />
-        <!-- 状态切换 -->
+        <!-- 状态切换按钮（仅在特定状态下显示） -->
         <Transition name="fade">
           <div
             class="all-controls"
@@ -51,10 +51,7 @@
           </div>
         </Transition>
       </main>
-      <div v-else id="loading">
-        <img src="/icon/logo.png" alt="logo" class="logo" />
-        <span class="tip">开发中</span>
-      </div>
+      <Loading v-else />
     </Transition>
   </Provider>
 </template>
@@ -69,6 +66,8 @@ import WeatherTime from "@/components/WeatherTime.vue";
 import SearchInp from "@/components/SearchInput/SearchInp.vue";
 import AllFunc from "@/components/AllFunc/AllFunc.vue";
 import Footer from "@/components/Footer.vue";
+import Loading from "@/components/Loading.vue";
+import { checkDays } from "@/utils/checkDays";
 
 const set = setStore();
 const status = statusStore();
@@ -91,6 +90,8 @@ const loadComplete = () => {
       showIcon: false,
       duration: 3000,
     });
+    // ⭐ 添加默哀检查
+    checkDays();
   });
 };
 
