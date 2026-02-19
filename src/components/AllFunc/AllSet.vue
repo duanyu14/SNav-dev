@@ -265,8 +265,9 @@ import { storeToRefs } from "pinia";
 import { setStore, statusStore } from "@/stores";
 import identifyInput from "@/utils/identifyInput";
 
+import { setStore, siteStore } from "@/stores";
 const set = setStore();
-const status = statusStore();
+const site = siteStore(); // 新增
 const {
   themeType,
   backgroundType,
@@ -384,10 +385,16 @@ const resetSite = () => {
 // 站点备份
 const backupSite = () => {
   try {
+    // 获取两个 store 的完整状态
+    const backupData = {
+      setData: set.$state,        // 设置数据
+      siteData: site.$state       // 站点数据（包含捷径、便签、待办）
+    };
+
     const date = new Date();
     const dateString = date.toISOString().replace(/[:.]/g, "-");
     const fileName = `Snavigation_Backup_${dateString}.json`;
-    const jsonData = JSON.stringify(set.$state);
+    const jsonData = JSON.stringify(backupData, null, 2); // 加缩进方便阅读
     const blob = new Blob([jsonData], { type: "application/json" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
@@ -398,8 +405,7 @@ const backupSite = () => {
     a.click();
     document.body.removeChild(a);
     URL.revokeObjectURL(url);
-    // 备份完成
-    $message.success("站点备份成功");
+    $message.success("站点备份成功（包含便签和待办）");
   } catch (error) {
     console.error("站点备份失败：", error);
     $message.error("站点备份失败");
@@ -417,27 +423,48 @@ const recoverSite = async () => {
     const file = fileInput.files[0];
     const jsonData = await file.text();
     const data = JSON.parse(jsonData);
-    // 恢复数据
-    $dialog.warning({
-      title: "站点恢复",
-      content: "确认使用该恢复文件？你现有的数据以及自定义设置都将被覆盖！",
-      positiveText: "恢复",
-      negativeText: "取消",
-      onPositiveClick: async () => {
-        const isSuccess = await set.recoverSiteData(data);
-        if (isSuccess) {
+
+    // 检查备份文件结构（兼容旧版只备份 setData 的情况）
+    if (data.setData && data.siteData) {
+      // 新版备份，包含两个 store
+      $dialog.warning({
+        title: "站点恢复",
+        content: "确认使用该备份文件？你现有的数据都将被覆盖！",
+        positiveText: "恢复",
+        negativeText: "取消",
+        onPositiveClick: async () => {
+          // 恢复 setData
+          set.recoverSiteData(data.setData); // 注意 set 中已有 recoverSiteData 方法
+          // 恢复 siteData（直接赋值）
+          site.$patch(data.siteData);
           $message.info("站点恢复成功，即将刷新");
           setTimeout(() => {
             window.location.reload();
           }, 1000);
-        } else {
-          $message.error("站点数据恢复失败，请重试");
-        }
-      },
-      onNegativeClick: () => {
-        recoverRef.value.value = null;
-      },
-    });
+        },
+        onNegativeClick: () => {
+          recoverRef.value.value = null;
+        },
+      });
+    } else {
+      // 旧版备份，只包含 setData（可能没有 siteData）
+      $dialog.warning({
+        title: "检测到旧版备份",
+        content: "该备份文件只包含设置，不会恢复便签和待办。确定继续？",
+        positiveText: "恢复设置",
+        negativeText: "取消",
+        onPositiveClick: async () => {
+          set.recoverSiteData(data);
+          $message.info("设置恢复成功，即将刷新");
+          setTimeout(() => {
+            window.location.reload();
+          }, 1000);
+        },
+        onNegativeClick: () => {
+          recoverRef.value.value = null;
+        },
+      });
+    }
   } catch (error) {
     console.error("站点数据恢复失败：", error);
     $message.error("站点数据恢复失败，请重试");
