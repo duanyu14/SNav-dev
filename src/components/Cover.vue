@@ -17,7 +17,7 @@
 </template>
 
 <script setup>
-import { ref, onMounted, onBeforeUnmount } from "vue";
+import { ref, onMounted, onBeforeUnmount, watch } from "vue";  
 import { statusStore, setStore } from "@/stores";
 
 const set = setStore();
@@ -56,6 +56,15 @@ const setBgUrl = () => {
       break;
   }
 };
+
+// 监听背景类型变化
+watch(() => set.backgroundType, () => {
+  setBgUrl();
+});
+
+onMounted(() => {
+  setBgUrl();
+});
 
 // 图片加载完成
 const imgLoadComplete = () => {

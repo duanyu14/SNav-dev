@@ -2,10 +2,14 @@
   <Provider>
     <!-- 壁纸 -->
     <Cover @loadComplete="loadComplete" />
-    <!-- 主界面 / 加载界面切换 -->
+    <!-- 顶部菜单（传入屏保状态） -->
+    <TopMenu :screenSaverVisible="screenSaverVisible" />
+    <!-- 屏保组件 -->
+    <ScreenSaver :visible="screenSaverVisible" @click="onUserActivity" />
+    <!-- 主界面（屏保时隐藏） -->
     <Transition name="fade" mode="out-in">
       <main
-        v-if="status.imgLoadStatus"
+        v-if="status.imgLoadStatus && !screenSaverVisible"
         tabindex="0"
         id="main"
         :class="`main-${status.siteStatus}`"
@@ -57,7 +61,13 @@
 </template>
 
 <script setup>
-import { onMounted, nextTick, watch, ref } from "vue";
+import {
+  onMounted,
+  onBeforeUnmount,
+  nextTick,
+  watch,
+  ref
+} from "vue";
 import { statusStore, setStore } from "@/stores";
 import { getGreeting } from "@/utils/timeTools";
 import Provider from "@/components/Provider.vue";
@@ -67,11 +77,65 @@ import SearchInp from "@/components/SearchInput/SearchInp.vue";
 import AllFunc from "@/components/AllFunc/AllFunc.vue";
 import Footer from "@/components/Footer.vue";
 import Loading from "@/components/Loading.vue";
+import TopMenu from "@/components/TopMenu.vue";
+import ScreenSaver from "@/components/ScreenSaver.vue";
 import { checkDays } from "@/utils/checkDays";
 
 const set = setStore();
 const status = statusStore();
 const mainClickable = ref(false);
+
+// 屏保可见性
+const screenSaverVisible = ref(false);
+let idleTimer = null;
+const IDLE_TIMEOUT = 30 * 1000; // 30秒
+
+// 重置空闲计时器
+const resetIdleTimer = () => {
+  if (idleTimer) clearTimeout(idleTimer);
+  if (screenSaverVisible.value) return;
+  idleTimer = setTimeout(() => {
+    // 进入屏保
+    screenSaverVisible.value = true;
+    // 随机切换壁纸（0-3）
+    const newType = Math.floor(Math.random() * 4);
+    if (newType !== set.backgroundType) {
+      set.backgroundType = newType;
+    }
+    // 显示提示消息
+    $message.info('检测到您长时间未操作，已进入屏保模式', {
+      duration: 2000
+    });
+  }, IDLE_TIMEOUT);
+};
+
+// 用户活动处理
+const onUserActivity = () => {
+  if (screenSaverVisible.value) {
+    screenSaverVisible.value = false;
+    resetIdleTimer();
+  } else {
+    resetIdleTimer();
+  }
+};
+
+// 启动空闲检测
+const startIdleDetection = () => {
+  const events = ['mousemove', 'keydown', 'click', 'scroll', 'touchstart'];
+  events.forEach(event => {
+    window.addEventListener(event, onUserActivity);
+  });
+  resetIdleTimer();
+};
+
+// 停止空闲检测
+const stopIdleDetection = () => {
+  const events = ['mousemove', 'keydown', 'click', 'scroll', 'touchstart'];
+  events.forEach(event => {
+    window.removeEventListener(event, onUserActivity);
+  });
+  if (idleTimer) clearTimeout(idleTimer);
+};
 
 // 获取配置
 const welcomeText = import.meta.env.VITE_WELCOME_TEXT ?? "欢迎访问本站";
@@ -90,7 +154,6 @@ const loadComplete = () => {
       showIcon: false,
       duration: 3000,
     });
-    // ⭐ 添加默哀检查
     checkDays();
   });
 };
@@ -98,9 +161,7 @@ const loadComplete = () => {
 // 全局键盘事件
 const mainPressKeyboard = (event) => {
   const keyCode = event.keyCode;
-  // 回车
   if (keyCode === 13) {
-    // focus 元素
     const mainInput = document.getElementById("main-input");
     status.setSiteStatus("focus");
     mainInput?.focus();
@@ -115,13 +176,14 @@ const changeThemeType = (val) => {
 };
 
 // 监听颜色变化
-watch(
-  () => set.themeType,
-  (val) => changeThemeType(val),
-);
+watch(() => set.themeType, changeThemeType, { immediate: true });
 
 onMounted(() => {
-  changeThemeType(set.themeType);
+  startIdleDetection();
+});
+
+onBeforeUnmount(() => {
+  stopIdleDetection();
 });
 </script>
 
