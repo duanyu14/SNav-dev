@@ -5,15 +5,26 @@ const useSiteDataStore = defineStore("siteData", {
   state: () => {
     return {
       shortcutData: defaultShortCut,
-      noteList: [],   // 每个便签对象包含 id, title, content
-      todoList: [],   // 每个待办对象包含 id, text, completed
+      noteList: [],
+      todoList: [],
+      weatherData: null,
+      hitokotoData: null,
+      lastWeatherFetchTime: 0,
+      lastHitokotoFetchTime: 0,
     };
   },
   actions: {
     setShortcutData(value) {
       this.shortcutData = value;
     },
-    // ✅ 将 recoverSiteData 放在这里
+    setWeatherData(data) {
+      this.weatherData = data;
+      this.lastWeatherFetchTime = Date.now();
+    },
+    setHitokotoData(data) {
+      this.hitokotoData = data;
+      this.lastHitokotoFetchTime = Date.now();
+    },
     recoverSiteData(data) {
       try {
         for (const key in data) {

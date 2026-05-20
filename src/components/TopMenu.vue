@@ -1,36 +1,39 @@
 <template>
+  <Transition name="fade">
+    <div v-show="menuOpen && !props.screenSaverVisible && !status.backgroundShow" class="menu-overlay" @click="closeMenu"></div>
+  </Transition>
   <div
     class="top-menu-container"
-    v-show="!screenSaverVisible"
+    v-show="!props.screenSaverVisible && !status.backgroundShow"
     :class="{ 'mobile': isMobile }"
   >
-    <!-- 箭头触发器 -->
     <div
       class="menu-trigger"
-      v-show="isMobile || arrowVisible || menuVisible"
+      v-show="(isMobile || arrowVisible || menuOpen) && !status.backgroundShow && !props.screenSaverVisible"
       @click="toggleMenu"
+      :class="{ active: menuOpen }"
     >
       <img
-        :src="menuVisible ? '/icon/arrow_up.png' : '/icon/arrow_down.png'"
+        :src="menuOpen ? '/icon/arrow_up.png' : '/icon/arrow_down.png'"
         class="arrow-icon"
         alt="arrow"
       />
     </div>
 
-    <!-- 下拉菜单 -->
     <Transition name="slide-down">
-      <div v-show="menuVisible" class="menu-content cards">
+      <div v-show="menuOpen" class="menu-content cards" @click.stop>
         <div class="menu-left">
-          <!-- 迷你版时间 -->
-          <div class="mini-time">
-            <span class="hour">{{ timeData.hour }}:{{ timeData.minute }}</span>
-            <span class="date">{{ timeData.month }}/{{ timeData.day }} {{ timeData.weekday }}</span>
+          <div class="time-row">
+            <span class="hour">{{ timeData.hour }}:{{ timeData.minute }}:{{ timeData.second }}</span>
           </div>
-          <!-- 迷你版天气（复用 WeatherTime 中的缓存数据） -->
-          <div v-if="set.showWeather" class="mini-weather">
-            <span>{{ weatherData?.condition || '--' }} {{ weatherData?.temp || '--' }}℃</span>
+          <div class="date-row">
+            <span>{{ timeData.year }}-{{ formatZero(timeData.month) }}-{{ timeData.day }} {{ timeData.weekday }}</span>
           </div>
-          <!-- 一言（迷你版） -->
+          <div v-if="set.showWeather" class="weather-row">
+            <span>{{ site.weatherData?.condition || '--' }} {{ site.weatherData?.temp || '--' }}℃</span>
+          </div>
+        </div>
+        <div class="menu-center">
           <Hitokoto mini />
         </div>
         <div class="menu-right">
@@ -40,6 +43,7 @@
               :key="item.id"
               :href="item.url"
               target="_blank"
+              rel="noopener noreferrer"
               @click.stop
             >
               <SvgIcon :iconName="`icon-${item.icon || 'link'}`" />
@@ -59,56 +63,48 @@ import { getCurrentTime } from '@/utils/timeTools';
 import Hitokoto from '@/components/Hitokoto.vue';
 
 const props = defineProps({
-  screenSaverVisible: Boolean  // 由父组件传入，用于控制整个组件隐藏
+  screenSaverVisible: Boolean
 });
 
 const status = statusStore();
 const set = setStore();
 const site = siteStore();
 
-// 菜单显示状态
-const menuVisible = ref(false);
-// 箭头是否可见（桌面端鼠标靠近顶部时触发）
+const menuOpen = ref(false);
 const arrowVisible = ref(false);
-// 是否为移动端（宽度 ≤ 720px）
-const isMobile = ref(window.innerWidth <= 720);
-// 时间数据
+const isMobile = ref(window.innerWidth <= 1024);
 const timeData = ref({});
-// 天气数据（从 localStorage 读取）
-const weatherData = ref(null);
 
-// 取前 4 个快捷站点作为快捷链接
+const formatZero = (num) => {
+  return num < 10 ? '0' + num : num;
+};
+
 const topLinks = computed(() => site.shortcutData.slice(0, 4));
 
-// 更新时间
 const updateTime = () => {
-  timeData.value = getCurrentTime(set.showZeroTime, set.use12HourFormat);
+  const time = getCurrentTime(set.showZeroTime, set.use12HourFormat);
+  timeData.value = time;
 };
 
-// 获取天气（从 localStorage 读取，与 WeatherTime 保持一致）
-const getWeatherFromCache = () => {
-  const cached = JSON.parse(localStorage.getItem('lastWeatherData'));
-  if (cached && cached.data) {
-    weatherData.value = cached.data;
-  }
+const toggleMenu = () => {
+  menuOpen.value = !menuOpen.value;
 };
 
-// 切换菜单（点击箭头时）
-const toggleMenu = (e) => {
-  e.stopPropagation();
-  menuVisible.value = !menuVisible.value;
+const closeMenu = () => {
+  menuOpen.value = false;
 };
 
-// 点击外部关闭菜单
 const handleClickOutside = (e) => {
-  if (menuVisible.value && !e.target.closest('.top-menu-container')) {
-    menuVisible.value = false;
+  if (menuOpen.value) {
+    const isMenuElement = e.target.closest('.top-menu-container') || e.target.classList.contains('menu-overlay');
+    if (!isMenuElement) {
+      closeMenu();
+    }
   }
 };
 
-// 鼠标移动检测靠近顶部（仅 PC）
 const handleMouseMove = (e) => {
-  if (!isMobile.value && !props.screenSaverVisible) {
+  if (!isMobile.value && !props.screenSaverVisible && !status.backgroundShow) {
     const threshold = 50;
     arrowVisible.value = e.clientY <= threshold;
   } else {
@@ -116,52 +112,58 @@ const handleMouseMove = (e) => {
   }
 };
 
-// 窗口大小变化检测移动端
-const handleResize = () => {
-  isMobile.value = window.innerWidth <= 720;
-};
-
-// ----- 触摸滑动支持（移动端） -----
-let touchStartY = 0;
-const TOUCH_THRESHOLD = 50; // 滑动距离阈值
-
-const handleTouchStart = (e) => {
-  touchStartY = e.touches[0].clientY;
-};
-
-const handleTouchMove = (e) => {
-  // 仅在移动端、菜单未展开、且非屏保时响应
-  if (!isMobile.value || menuVisible.value || props.screenSaverVisible) return;
-  const touchEndY = e.touches[0].clientY;
-  const deltaY = touchEndY - touchStartY;
-  if (deltaY > TOUCH_THRESHOLD) {
-    // 向下滑动超过阈值，打开菜单
-    menuVisible.value = true;
+const handleKeyDown = (e) => {
+  if (e.key === 'Escape' && menuOpen.value) {
+    closeMenu();
   }
+};
+
+const handleResize = () => {
+  isMobile.value = window.innerWidth <= 1024;
 };
 
 onMounted(() => {
   updateTime();
   setInterval(updateTime, 1000);
-  getWeatherFromCache();
 
   document.addEventListener('click', handleClickOutside);
   window.addEventListener('mousemove', handleMouseMove);
   window.addEventListener('resize', handleResize);
-  window.addEventListener('touchstart', handleTouchStart);
-  window.addEventListener('touchmove', handleTouchMove);
+  window.addEventListener('keydown', handleKeyDown);
 });
 
 onBeforeUnmount(() => {
   document.removeEventListener('click', handleClickOutside);
   window.removeEventListener('mousemove', handleMouseMove);
   window.removeEventListener('resize', handleResize);
-  window.removeEventListener('touchstart', handleTouchStart);
-  window.removeEventListener('touchmove', handleTouchMove);
+  window.removeEventListener('keydown', handleKeyDown);
 });
 </script>
 
 <style lang="scss" scoped>
+.menu-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: rgba(0, 0, 0, 0.3);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  z-index: 290;
+  pointer-events: auto;
+}
+
+.fade-enter-active,
+.fade-leave-active {
+  transition: opacity 0.3s ease;
+}
+
+.fade-enter-from,
+.fade-leave-to {
+  opacity: 0;
+}
+
 .top-menu-container {
   position: fixed;
   top: 20px;
@@ -171,7 +173,7 @@ onBeforeUnmount(() => {
   flex-direction: column;
   align-items: center;
   z-index: 300;
-  pointer-events: none; /* 让容器不阻挡点击，但内部可点 */
+  pointer-events: none;
 
   &.mobile {
     .menu-trigger {
@@ -203,8 +205,9 @@ onBeforeUnmount(() => {
     }
 
     .arrow-icon {
-      font-size: 24px;
-      color: var(--main-text-color);
+      width: 24px;
+      height: 24px;
+      filter: brightness(0) invert(1);
     }
   }
 
@@ -212,116 +215,159 @@ onBeforeUnmount(() => {
     pointer-events: auto;
     margin-top: 10px;
     width: 90%;
-    max-width: 900px;
-    padding: 16px 24px;
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
+    max-width: 1100px;
+    padding: 20px 28px;
     background: var(--main-background-light-color);
     backdrop-filter: blur(10px);
     border-radius: 40px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 30px;
     box-shadow: var(--main-box-shadow);
     color: var(--main-text-color);
 
     .menu-left {
+      flex: 1;
       display: flex;
-      gap: 24px;
-      align-items: center;
-      font-size: 0.9rem;
+      flex-direction: column;
+      gap: 8px;
 
-      .mini-time {
-        display: flex;
-        flex-direction: column;
+      .time-row {
         .hour {
-          font-size: 1.2rem;
+          font-family: 'HarmonyOS_Regular', monospace;
+          font-size: 2rem;
           font-weight: bold;
         }
-        .date {
-          font-size: 0.8rem;
-          opacity: 0.7;
-        }
       }
-
-      .mini-weather {
+      .date-row {
+        font-size: 1rem;
+        opacity: 0.85;
+      }
+      .weather-row {
         font-size: 0.9rem;
+        margin-top: 4px;
       }
+    }
 
+    .menu-center {
+      flex: 2;
+      display: flex;
+      justify-content: center;
       :deep(.hitokoto) {
-        margin-top: 0;
-        font-size: 0.85rem;
-        max-width: 200px;
+        text-align: center;
+        .content .text {
+          font-size: 1rem;
+          -webkit-line-clamp: 2;
+        }
+        .content .from {
+          font-size: 0.9rem;
+        }
       }
     }
 
     .menu-right {
+      flex: 1;
+      display: flex;
+      justify-content: flex-end;
+
       .quick-links {
         display: flex;
-        gap: 16px;
+        flex-direction: column;
+        gap: 10px;
 
         a {
           display: flex;
-          flex-direction: column;
           align-items: center;
+          gap: 8px;
           color: var(--main-text-color);
           text-decoration: none;
-          font-size: 0.8rem;
-          transition: 0.2s;
+          font-size: 0.85rem;
+          padding: 6px 12px;
+          background: rgba(255, 255, 255, 0.1);
+          border-radius: 20px;
+          transition: all 0.2s;
+          white-space: nowrap;
 
           &:hover {
-            color: var(--main-text-hover-color);
+            background: rgba(255, 255, 255, 0.2);
             transform: scale(1.05);
-          }
-
-          .i-icon {
-            font-size: 20px;
-            margin-bottom: 4px;
           }
         }
       }
     }
 
-    // 移动端适配
-    @media (max-width: 720px) {
+    @media (max-width: 1024px) {
       flex-direction: column;
-      align-items: stretch;
-      padding: 16px;
+      align-items: center;
+      gap: 16px;
+
+      .menu-left,
+      .menu-center,
+      .menu-right {
+        width: 100%;
+        justify-content: center;
+        text-align: center;
+      }
+
+      .menu-left {
+        align-items: center;
+        gap: 4px;
+        .time-row .hour {
+          font-size: 1.3rem;
+        }
+        .date-row {
+          font-size: 0.85rem;
+        }
+      }
+
+      .menu-right .quick-links {
+        flex-direction: row;
+        flex-wrap: wrap;
+        justify-content: center;
+        gap: 10px;
+      }
+    }
+
+    @media (max-width: 720px) {
+      padding: 16px 15px;
       width: 95%;
       border-radius: 20px;
 
       .menu-left {
-        justify-content: space-around;
-        margin-bottom: 12px;
+        .time-row .hour {
+          font-size: 1.2rem;
+        }
+        .date-row {
+          font-size: 0.8rem;
+        }
+      }
+
+      .menu-center :deep(.hitokoto) {
+        .content .text {
+          font-size: 0.9rem;
+        }
       }
 
       .menu-right .quick-links {
-        flex-wrap: wrap;
-        justify-content: center;
-        gap: 12px 8px;
-
+        gap: 8px;
         a {
-          font-size: 0.9rem;
-          .i-icon {
-            font-size: 24px;
-          }
+          font-size: 0.8rem;
+          padding: 5px 10px;
         }
       }
     }
   }
 }
 
-/* 滑入动画 */
 .slide-down-enter-active,
 .slide-down-leave-active {
   transition: all 0.3s ease;
 }
+
 .slide-down-enter-from,
 .slide-down-leave-to {
   opacity: 0;
   transform: translateY(-20px);
-}
-.arrow-icon {
-  width: 24px;
-  height: 24px;
-  filter: brightness(0) invert(1); /* 将黑色图标变为白色 */
 }
 </style>

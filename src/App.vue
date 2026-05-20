@@ -1,12 +1,8 @@
 <template>
   <Provider>
-    <!-- 壁纸 -->
     <Cover @loadComplete="loadComplete" />
-    <!-- 顶部菜单（传入屏保状态） -->
     <TopMenu :screenSaverVisible="screenSaverVisible" />
-    <!-- 屏保组件 -->
     <ScreenSaver :visible="screenSaverVisible" @click="onUserActivity" />
-    <!-- 主界面（屏保时隐藏） -->
     <Transition name="fade" mode="out-in">
       <main
         v-if="status.imgLoadStatus && !screenSaverVisible"
@@ -22,7 +18,6 @@
         <SearchInp @contextmenu.stop />
         <AllFunc @contextmenu.stop />
         <Footer />
-        <!-- 状态切换按钮（仅在特定状态下显示） -->
         <Transition name="fade">
           <div
             class="all-controls"
@@ -68,8 +63,9 @@ import {
   watch,
   ref
 } from "vue";
-import { statusStore, setStore } from "@/stores";
+import { statusStore, setStore, siteStore } from "@/stores";
 import { getGreeting } from "@/utils/timeTools";
+import { getAdcode, getWeather, getHitokoto } from "@/api";
 import Provider from "@/components/Provider.vue";
 import Cover from "@/components/Cover.vue";
 import WeatherTime from "@/components/WeatherTime.vue";
@@ -83,43 +79,38 @@ import { checkDays } from "@/utils/checkDays";
 
 const set = setStore();
 const status = statusStore();
+const site = siteStore();
 const mainClickable = ref(false);
 
-// 屏保可见性
 const screenSaverVisible = ref(false);
 let idleTimer = null;
-const IDLE_TIMEOUT = 30 * 1000; // 30秒
+const IDLE_TIMEOUT = 30 * 1000;
+const WEATHER_CACHE_TIME = 5 * 60 * 1000;
+const HITOKOTO_CACHE_TIME = 60 * 1000;
 
-// 重置空闲计时器
 const resetIdleTimer = () => {
   if (idleTimer) clearTimeout(idleTimer);
   if (screenSaverVisible.value) return;
   idleTimer = setTimeout(() => {
-    // 进入屏保
     screenSaverVisible.value = true;
-    // 随机切换壁纸（0-3）
-    const newType = Math.floor(Math.random() * 4);
-    if (newType !== set.backgroundType) {
-      set.backgroundType = newType;
-    }
-    // 显示提示消息
     $message.info('检测到您长时间未操作，已进入屏保模式', {
       duration: 2000
     });
   }, IDLE_TIMEOUT);
 };
 
-// 用户活动处理
 const onUserActivity = () => {
   if (screenSaverVisible.value) {
     screenSaverVisible.value = false;
+    status.setSiteStatus('normal');
+    status.setMenuOpenState(false);
+    status.setBackgroundShow(false);
     resetIdleTimer();
   } else {
     resetIdleTimer();
   }
 };
 
-// 启动空闲检测
 const startIdleDetection = () => {
   const events = ['mousemove', 'keydown', 'click', 'scroll', 'touchstart'];
   events.forEach(event => {
@@ -128,7 +119,6 @@ const startIdleDetection = () => {
   resetIdleTimer();
 };
 
-// 停止空闲检测
 const stopIdleDetection = () => {
   const events = ['mousemove', 'keydown', 'click', 'scroll', 'touchstart'];
   events.forEach(event => {
@@ -137,16 +127,59 @@ const stopIdleDetection = () => {
   if (idleTimer) clearTimeout(idleTimer);
 };
 
-// 获取配置
+const fetchWeatherData = async () => {
+  const weatherKey = import.meta.env.VITE_WEATHER_KEY;
+  if (!weatherKey) {
+    return;
+  }
+  const currentTime = Date.now();
+  if (currentTime - site.lastWeatherFetchTime >= WEATHER_CACHE_TIME) {
+    try {
+      const adCodeResult = await getAdcode(weatherKey);
+      if (adCodeResult.infocode === "10000") {
+        const weatherResult = await getWeather(weatherKey, adCodeResult.adcode);
+        if (weatherResult.infocode === "10000" && weatherResult.lives && weatherResult.lives.length > 0) {
+          const data = weatherResult.lives[0];
+          const weatherData = {
+            condition: data.weather,
+            temp: data.temperature,
+            windDir: data.winddirection + "风",
+            windLevel: data.windpower,
+          };
+          site.setWeatherData(weatherData);
+          localStorage.setItem("lastWeatherData", JSON.stringify({
+            data: weatherData,
+            lastFetchTime: currentTime
+          }));
+        }
+      }
+    } catch (error) {
+      console.error("获取天气数据失败：", error);
+    }
+  }
+};
+
+const fetchHitokotoData = async () => {
+  const currentTime = Date.now();
+  if (currentTime - site.lastHitokotoFetchTime >= HITOKOTO_CACHE_TIME) {
+    try {
+      const hitokotoResult = await getHitokoto();
+      if (hitokotoResult) {
+        site.setHitokotoData(hitokotoResult);
+      }
+    } catch (error) {
+      console.error("获取一言数据失败：", error);
+    }
+  }
+};
+
 const welcomeText = import.meta.env.VITE_WELCOME_TEXT ?? "欢迎访问本站";
 
-// 鼠标右键
 const mainContextmenu = (event) => {
   event.preventDefault();
   status.setSiteStatus("box");
 };
 
-// 加载完成事件
 const loadComplete = () => {
   nextTick().then(() => {
     mainClickable.value = true;
@@ -155,10 +188,11 @@ const loadComplete = () => {
       duration: 3000,
     });
     checkDays();
+    fetchWeatherData();
+    fetchHitokotoData();
   });
 };
 
-// 全局键盘事件
 const mainPressKeyboard = (event) => {
   const keyCode = event.keyCode;
   if (keyCode === 13) {
@@ -166,16 +200,29 @@ const mainPressKeyboard = (event) => {
     status.setSiteStatus("focus");
     mainInput?.focus();
   }
+
+  if (event.ctrlKey && event.shiftKey && event.key === "S") {
+    event.preventDefault();
+    screenSaverVisible.value = !screenSaverVisible.value;
+    if (screenSaverVisible.value) {
+      $message.info("已进入屏保模式（调试）", {
+        grouping: true,
+      });
+    } else {
+      onUserActivity();
+      $message.info("已退出屏保模式（调试）", {
+        grouping: true,
+      });
+    }
+  }
 };
 
-// 根据主题类别更改
 const changeThemeType = (val) => {
   const htmlElement = document.querySelector("html");
   const themeType = val === "light" ? "light" : "dark";
   htmlElement.setAttribute("theme", themeType);
 };
 
-// 监听颜色变化
 watch(() => set.themeType, changeThemeType, { immediate: true });
 
 onMounted(() => {

@@ -24,70 +24,72 @@ const set = setStore();
 const status = statusStore();
 const bgUrl = ref(null);
 const imgTimeout = ref(null);
+const refreshCounter = ref(0);
 const emit = defineEmits(["loadComplete"]);
 
-// 壁纸随机数
-// 请依据文件夹内的图片个数修改 Math.random() 后面的第一个数字
-const bgRandom = Math.floor(Math.random() * 3 + 1);
+let bgRandom = Math.floor(Math.random() * 3 + 1);
 
-// 赋值壁纸
 const setBgUrl = () => {
+  refreshCounter.value++;
+  bgRandom = Math.floor(Math.random() * 3 + 1);
   const { backgroundType } = set;
+  const timestamp = Date.now();
   switch (backgroundType) {
     case 0:
-      bgUrl.value = `/background/bg${bgRandom}.jpg`;
+      bgUrl.value = `/background/bg${bgRandom}.jpg?v=${timestamp}`;
       break;
     case 1: {
       const isMobile = window.innerWidth < 768;
-      bgUrl.value = `https://api.dujin.org/bing/${isMobile ? "m" : "1920"}.php`;
+      bgUrl.value = `https://api.dujin.org/bing/${isMobile ? "m" : "1920"}.php?v=${timestamp}`;
       break;
     }
     case 2:
-      bgUrl.value = "https://api.aixiaowai.cn/gqapi/gqapi.php";
+      bgUrl.value = `https://api.aixiaowai.cn/gqapi/gqapi.php?v=${timestamp}`;
       break;
     case 3:
-      bgUrl.value = "https://api.aixiaowai.cn/api/api.php";
+      bgUrl.value = `https://api.aixiaowai.cn/api/api.php?v=${timestamp}`;
       break;
     case 4:
-      bgUrl.value = set.backgroundCustom;
+      bgUrl.value = `${set.backgroundCustom}${set.backgroundCustom.includes('?') ? '&' : '?'}v=${timestamp}`;
       break;
     default:
-      bgUrl.value = `/background/bg${bgRandom}.jpg`;
+      bgUrl.value = `/background/bg${bgRandom}.jpg?v=${timestamp}`;
       break;
   }
 };
 
-// 监听背景类型变化
 watch(() => set.backgroundType, () => {
   setBgUrl();
 });
 
-onMounted(() => {
-  setBgUrl();
+watch(() => set.backgroundCustom, () => {
+  if (set.backgroundType === 4) {
+    setBgUrl();
+  }
 });
 
-// 图片加载完成
 const imgLoadComplete = () => {
-  imgTimeout.value = setTimeout(
-    () => {
-      status.setImgLoadStatus(true);
-    },
-    Math.floor(Math.random() * (600 - 300 + 1)) + 300,
-  );
+  if (refreshCounter.value > 1) {
+    status.setImgLoadStatus(true);
+  } else {
+    imgTimeout.value = setTimeout(
+      () => {
+        status.setImgLoadStatus(true);
+      },
+      Math.floor(Math.random() * (600 - 300 + 1)) + 300,
+    );
+  }
 };
 
-// 图片动画完成
 const imgAnimationEnd = () => {
   console.log("壁纸加载且动画完成");
-  // 加载完成事件
   emit("loadComplete");
 };
 
-// 图片显示失败
 const imgLoadError = () => {
   console.error("壁纸加载失败：", bgUrl.value);
   $message.error("壁纸加载失败，已临时切换回默认");
-  bgUrl.value = `/background/bg${bgRandom}.jpg`;
+  bgUrl.value = `/background/bg${bgRandom}.jpg?v=${Date.now()}`;
 };
 
 onMounted(() => {

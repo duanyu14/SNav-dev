@@ -216,6 +216,24 @@
             />
             <n-button strong secondary @click="recoverRef?.click()"> 恢复 </n-button>
           </n-card>
+          <n-h6 prefix="bar"> 实验室 </n-h6>
+          <n-card class="set-item">
+            <div class="name">
+              <span class="title">功能调试入口</span>
+              <span class="tip">用于单独调试各个功能模块</span>
+            </div>
+            <n-grid class="lab-grid" responsive="screen" cols="2 s:3" :x-gap="12" :y-gap="12">
+              <n-grid-item v-for="(item, index) in labFeatures" :key="index">
+                <n-button
+                  size="small"
+                  :class="item.color"
+                  @click="openLabFeature(item.action)"
+                >
+                  {{ item.name }}
+                </n-button>
+              </n-grid-item>
+            </n-grid>
+          </n-card>
         </n-scrollbar>
       </n-tab-pane>
     </n-tabs>
@@ -235,6 +253,50 @@
         <n-space justify="end">
           <n-button strong secondary @click="customCoverModal = false"> 取消 </n-button>
           <n-button strong secondary @click="setCustomCover"> 确认 </n-button>
+        </n-space>
+      </template>
+    </n-modal>
+    <!-- 实验室功能调试弹窗 -->
+    <n-modal 
+      preset="card" 
+      title="实验室 - 功能调试" 
+      v-model:show="labModal" 
+      :bordered="false"
+      width="600px"
+    >
+      <div class="lab-content">
+        <div class="lab-info">
+          <n-tag type="warning" size="small">实验室功能</n-tag>
+          <span class="lab-title">{{ getFeatureName(currentLabFeature) }}</span>
+        </div>
+        <div class="lab-description">
+          {{ getFeatureDescription(currentLabFeature) }}
+        </div>
+        <div class="lab-actions">
+          <n-space vertical>
+            <n-button block strong @click="testFeature(currentLabFeature)">
+              开始测试
+            </n-button>
+            <n-button block secondary @click="showFeatureInfo(currentLabFeature)">
+              查看功能信息
+            </n-button>
+            <n-button block secondary @click="resetFeature(currentLabFeature)">
+              重置功能设置
+            </n-button>
+          </n-space>
+        </div>
+        <div class="lab-status" v-if="labStatus">
+          <n-alert :type="labStatus.type" :title="labStatus.title">
+            <div class="status-content">
+              <div v-if="labStatus.message" class="status-message">{{ labStatus.message }}</div>
+              <div v-if="labStatus.description" class="status-description">{{ labStatus.description }}</div>
+            </div>
+          </n-alert>
+        </div>
+      </div>
+      <template #footer>
+        <n-space justify="end">
+          <n-button strong secondary @click="labModal = false"> 关闭 </n-button>
         </n-space>
       </template>
     </n-modal>
@@ -260,6 +322,8 @@ import {
   NFormItem,
   NInput,
   NSlider,
+  NTag,
+  NAlert,
 } from "naive-ui";
 import { storeToRefs } from "pinia";
 import { setStore, statusStore, siteStore } from "@/stores";  // ✅ 合并
@@ -289,6 +353,202 @@ const {
 const recoverRef = ref(null);
 const customCoverModal = ref(false);
 const customCoverUrl = ref("");
+const labModal = ref(false);
+const currentLabFeature = ref(null);
+
+// 实验室功能列表
+const labFeatures = [
+  { name: "时间显示", action: "time", color: "primary" },
+  { name: "天气显示", action: "weather", color: "success" },
+  { name: "一言显示", action: "hitokoto", color: "warning" },
+  { name: "下拉菜单", action: "topmenu", color: "info" },
+  { name: "屏保功能", action: "screensaver", color: "error" },
+  { name: "壁纸切换", action: "cover", color: "primary" },
+  { name: "快捷键", action: "shortcut", color: "success" },
+  { name: "便签", action: "note", color: "warning" },
+  { name: "待办", action: "todo", color: "info" },
+];
+
+// 打开实验室功能调试
+const openLabFeature = (feature) => {
+  currentLabFeature.value = feature;
+  labModal.value = true;
+  labStatus.value = null;
+};
+
+const labStatus = ref(null);
+
+const featureInfo = {
+  time: { name: "时间显示", description: "显示当前时间，支持农历、秒显示、12小时制等选项", settings: ["showLunar", "showSeconds", "use12HourFormat", "showZeroTime"] },
+  weather: { name: "天气显示", description: "显示当前位置的天气信息，支持5分钟自动刷新", settings: ["showWeather"] },
+  hitokoto: { name: "一言显示", description: "显示随机的一言句子，支持1分钟自动刷新", settings: [] },
+  topmenu: { name: "下拉菜单", description: "顶部下拉菜单，显示时间、天气、一言和快捷链接", settings: [] },
+  screensaver: { name: "屏保功能", description: "长时间未操作自动进入屏保模式", settings: [] },
+  cover: { name: "壁纸切换", description: "背景壁纸管理，支持多种壁纸源", settings: ["backgroundType", "backgroundBlur", "showBackgroundGray", "backgroundCustom"] },
+  shortcut: { name: "快捷键", description: "自定义快捷链接管理", settings: [] },
+  note: { name: "便签", description: "便签功能，支持添加、编辑、删除便签", settings: [] },
+  todo: { name: "待办", description: "待办事项管理，支持添加、完成、删除待办", settings: [] },
+};
+
+const getFeatureName = (feature) => {
+  return featureInfo[feature]?.name || "未知功能";
+};
+
+const getFeatureDescription = (feature) => {
+  return featureInfo[feature]?.description || "暂无描述";
+};
+
+const testFeature = (feature) => {
+  labStatus.value = { type: "info", title: "测试中", message: `正在测试 ${getFeatureName(feature)} 功能...` };
+  
+  setTimeout(() => {
+    switch (feature) {
+      case "time":
+        labStatus.value = { 
+          type: "success", 
+          title: "测试成功", 
+          message: "时间显示功能正常工作",
+          description: `当前位置：页面中央时间区域 | 当前时间：${new Date().toLocaleTimeString()}`
+        };
+        break;
+      case "weather":
+        if (site.weatherData) {
+          labStatus.value = { 
+            type: "success", 
+            title: "测试成功", 
+            message: "天气数据正常",
+            description: `当前位置：页面顶部下拉菜单 | 天气：${site.weatherData.weather}，温度：${site.weatherData.temp}°C`
+          };
+        } else {
+          labStatus.value = { 
+            type: "warning", 
+            title: "测试结果", 
+            message: "天气数据尚未加载",
+            description: "请检查网络连接或稍后重试。位置：页面顶部下拉菜单"
+          };
+        }
+        break;
+      case "hitokoto":
+        if (site.hitokotoData) {
+          labStatus.value = { 
+            type: "success", 
+            title: "测试成功", 
+            message: `一言数据正常`,
+            description: `当前位置：页面顶部下拉菜单 | 内容：「${site.hitokotoData.hitokoto}」——${site.hitokotoData.from}`
+          };
+        } else {
+          labStatus.value = { 
+            type: "warning", 
+            title: "测试结果", 
+            message: "一言数据尚未加载",
+            description: "请检查网络连接。位置：页面顶部下拉菜单"
+          };
+        }
+        break;
+      case "topmenu":
+        status.toggleMenuOpenState();
+        labStatus.value = { 
+          type: "success", 
+          title: "测试成功", 
+          message: "下拉菜单已切换",
+          description: "位置：页面顶部导航栏，鼠标靠近顶部区域或点击右侧按钮可打开"
+        };
+        break;
+      case "screensaver":
+        labStatus.value = { 
+          type: "info", 
+          title: "测试提示", 
+          message: "屏保功能说明",
+          description: "位置：页面全局 | 触发条件：5分钟无操作后自动进入，可通过移动鼠标或点击退出"
+        };
+        break;
+      case "cover":
+        const oldType = set.backgroundType;
+        set.backgroundType = (oldType + 1) % 4;
+        labStatus.value = { 
+          type: "success", 
+          title: "测试成功", 
+          message: `壁纸已切换到类型 ${set.backgroundType}`,
+          description: "位置：页面背景 | 点击其他壁纸类型可继续切换"
+        };
+        break;
+      case "shortcut":
+        labStatus.value = { 
+          type: "success", 
+          title: "测试成功", 
+          message: `快捷链接共 ${site.shortcutData?.length || 0} 条`,
+          description: "位置：页面中央主区域 | 点击可打开快捷链接管理"
+        };
+        break;
+      case "note":
+        labStatus.value = { 
+          type: "success", 
+          title: "测试成功", 
+          message: `便签共 ${site.noteList?.length || 0} 条`,
+          description: "位置：页面底部功能区 | 点击可打开便签管理"
+        };
+        break;
+      case "todo":
+        labStatus.value = { 
+          type: "success", 
+          title: "测试成功", 
+          message: `待办共 ${site.todoList?.length || 0} 条`,
+          description: "位置：页面底部功能区 | 点击可打开待办管理"
+        };
+        break;
+      default:
+        labStatus.value = { type: "error", title: "测试失败", message: "未知功能" };
+    }
+  }, 500);
+};
+
+const showFeatureInfo = (feature) => {
+  const info = featureInfo[feature];
+  if (!info) {
+    labStatus.value = { type: "error", title: "错误", message: "未知功能" };
+    return;
+  }
+  
+  let settingsText = "";
+  if (info.settings && info.settings.length > 0) {
+    settingsText = `相关设置：${info.settings.join("、")}`;
+  }
+  
+  labStatus.value = { 
+    type: "info", 
+    title: "功能信息", 
+    message: `功能名称：${info.name}`,
+    description: `${info.description}${settingsText ? '。' + settingsText : ''}`
+  };
+};
+
+const resetFeature = (feature) => {
+  labStatus.value = { type: "warning", title: "重置确认", message: `确定要重置 ${getFeatureName(feature)} 的设置吗？` };
+  
+  setTimeout(() => {
+    switch (feature) {
+      case "time":
+        set.showLunar = true;
+        set.showSeconds = true;
+        set.use12HourFormat = false;
+        set.showZeroTime = true;
+        break;
+      case "cover":
+        set.backgroundType = 0;
+        set.backgroundBlur = 15;
+        set.showBackgroundGray = false;
+        set.backgroundCustom = "";
+        break;
+      case "weather":
+        set.showWeather = true;
+        break;
+      default:
+        labStatus.value = { type: "info", title: "提示", message: `${getFeatureName(feature)} 没有可重置的设置项` };
+        return;
+    }
+    labStatus.value = { type: "success", title: "重置成功", message: `${getFeatureName(feature)} 的设置已恢复默认` };
+  }, 300);
+};
 
 // 壁纸类别
 const backgroundTypeArr = [
@@ -320,13 +580,13 @@ const changeBackground = (type, reset = false) => {
       negativeText: "取消",
       onPositiveClick: () => {
         backgroundType.value = 0;
-        $message.info("已恢复为默认壁纸，刷新后生效");
+        $message.info("已恢复为默认壁纸");
       },
     });
     return true;
   }
   backgroundType.value = type;
-  $message.success(`已切换为${backgroundTypeArr[type].name}，刷新后生效`);
+  $message.success(`已切换为${backgroundTypeArr[type].name}`);
 };
 
 // 链接跳转方式
@@ -385,16 +645,25 @@ const resetSite = () => {
 // 站点备份
 const backupSite = () => {
   try {
-    // 获取两个 store 的完整状态
+    const date = new Date();
+    const shortcutCount = site.shortcutData?.length || 0;
+    const noteCount = site.noteList?.length || 0;
+    const todoCount = site.todoList?.length || 0;
+    
     const backupData = {
-      setData: set.$state,        // 设置数据
-      siteData: site.$state       // 站点数据（包含捷径、便签、待办）
+      version: "2.4.4.3",
+      backupTime: date.toISOString(),
+      backupDate: dateString,
+      appName: "Snavigation",
+      setData: set.$state,
+      siteData: site.$state,
+      statusData: {
+        mainBoxBig: status.mainBoxBig
+      }
     };
 
-    const date = new Date();
-    const dateString = date.toISOString().replace(/[:.]/g, "-");
     const fileName = `Snavigation_Backup_${dateString}.json`;
-    const jsonData = JSON.stringify(backupData, null, 2); // 加缩进方便阅读
+    const jsonData = JSON.stringify(backupData, null, 2);
     const blob = new Blob([jsonData], { type: "application/json" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
@@ -405,11 +674,34 @@ const backupSite = () => {
     a.click();
     document.body.removeChild(a);
     URL.revokeObjectURL(url);
-    $message.success("站点备份成功（包含便签和待办）");
+    
+    $message.success(`站点备份成功！\n包含：捷径(${shortcutCount})、便签(${noteCount})、待办(${todoCount})`);
   } catch (error) {
     console.error("站点备份失败：", error);
     $message.error("站点备份失败");
   }
+};
+
+// 验证备份文件
+const validateBackupFile = (data) => {
+  if (!data || typeof data !== 'object') {
+    return { valid: false, message: '备份文件格式无效' };
+  }
+  
+  if (!data.setData && !data.siteData) {
+    if (data.backgroundType !== undefined || data.backgroundBlur !== undefined) {
+      return { valid: true, version: 'old', message: '旧版备份文件' };
+    }
+    return { valid: false, message: '备份文件不包含有效数据' };
+  }
+  
+  return { 
+    valid: true, 
+    version: data.version || 'unknown', 
+    message: '有效备份文件',
+    backupTime: data.backupTime,
+    appName: data.appName
+  };
 };
 
 // 站点恢复
@@ -420,51 +712,72 @@ const recoverSite = async () => {
       $message.error("请选择要恢复的备份文件");
       return false;
     }
+    
     const file = fileInput.files[0];
     const jsonData = await file.text();
-    const data = JSON.parse(jsonData);
-
-    // 检查备份文件结构（兼容旧版只备份 setData 的情况）
-    if (data.setData && data.siteData) {
-      // 新版备份，包含两个 store
-      $dialog.warning({
-        title: "站点恢复",
-        content: "确认使用该备份文件？你现有的数据都将被覆盖！",
-        positiveText: "恢复",
-        negativeText: "取消",
-        onPositiveClick: async () => {
-          // 恢复 setData
-          set.recoverSiteData(data.setData); // 注意 set 中已有 recoverSiteData 方法
-          // 恢复 siteData（直接赋值）
-          site.$patch(data.siteData);
+    let data;
+    
+    try {
+      data = JSON.parse(jsonData);
+    } catch {
+      $message.error("备份文件格式错误，无法解析");
+      return false;
+    }
+    
+    const validation = validateBackupFile(data);
+    if (!validation.valid) {
+      $message.error(validation.message);
+      return false;
+    }
+    
+    const shortcutCount = data.siteData?.shortcutData?.length || 0;
+    const noteCount = data.siteData?.noteList?.length || 0;
+    const todoCount = data.siteData?.todoList?.length || 0;
+    
+    let content = "确认使用该备份文件？你现有的数据都将被覆盖！\n\n";
+    if (validation.backupTime) {
+      const backupDate = new Date(validation.backupTime);
+      content += `备份时间：${backupDate.toLocaleString()}\n`;
+    }
+    if (validation.version) {
+      content += `备份版本：${validation.version}\n`;
+    }
+    content += `包含内容：\n- 设置：是\n- 捷径：${shortcutCount} 条\n- 便签：${noteCount} 条\n- 待办：${todoCount} 条`;
+    
+    $dialog.warning({
+      title: "站点恢复",
+      content: content,
+      positiveText: "恢复",
+      negativeText: "取消",
+      onPositiveClick: async () => {
+        try {
+          if (data.setData) {
+            set.recoverSiteData(data.setData);
+          } else {
+            set.recoverSiteData(data);
+          }
+          
+          if (data.siteData) {
+            site.$patch(data.siteData);
+          }
+          
+          if (data.statusData?.mainBoxBig !== undefined) {
+            status.setMainBoxBig(data.statusData.mainBoxBig);
+          }
+          
           $message.info("站点恢复成功，即将刷新");
           setTimeout(() => {
             window.location.reload();
-          }, 1000);
-        },
-        onNegativeClick: () => {
-          recoverRef.value.value = null;
-        },
-      });
-    } else {
-      // 旧版备份，只包含 setData（可能没有 siteData）
-      $dialog.warning({
-        title: "检测到旧版备份",
-        content: "该备份文件只包含设置，不会恢复便签和待办。确定继续？",
-        positiveText: "恢复设置",
-        negativeText: "取消",
-        onPositiveClick: async () => {
-          set.recoverSiteData(data);
-          $message.info("设置恢复成功，即将刷新");
-          setTimeout(() => {
-            window.location.reload();
-          }, 1000);
-        },
-        onNegativeClick: () => {
-          recoverRef.value.value = null;
-        },
-      });
-    }
+          }, 1500);
+        } catch (restoreError) {
+          console.error("恢复过程出错：", restoreError);
+          $message.error("恢复过程出错，请检查备份文件");
+        }
+      },
+      onNegativeClick: () => {
+        recoverRef.value.value = null;
+      },
+    });
   } catch (error) {
     console.error("站点数据恢复失败：", error);
     $message.error("站点数据恢复失败，请重试");
@@ -516,6 +829,60 @@ onMounted(() => {
     }
     &:active {
       box-shadow: none;
+    }
+  }
+}
+
+.lab-grid {
+  margin-top: 12px;
+}
+
+.lab-content {
+  .lab-info {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 12px;
+  }
+  
+  .lab-title {
+    font-size: 16px;
+    font-weight: 600;
+    color: var(--text-color);
+  }
+  
+  .lab-description {
+    font-size: 14px;
+    color: var(--text-secondary-color);
+    line-height: 1.6;
+    margin-bottom: 20px;
+    padding: 12px;
+    background-color: var(--main-background-light-color);
+    border-radius: 8px;
+  }
+  
+  .lab-actions {
+    margin-bottom: 16px;
+  }
+  
+  .lab-status {
+    margin-top: 12px;
+    max-height: 200px;
+    overflow-y: auto;
+    
+    .status-content {
+      .status-message {
+        font-weight: 500;
+        margin-bottom: 8px;
+      }
+      
+      .status-description {
+        color: var(--text-secondary-color);
+        font-size: 13px;
+        line-height: 1.6;
+        white-space: pre-wrap;
+        word-break: break-word;
+      }
     }
   }
 }

@@ -5,7 +5,6 @@ import fetchJsonp from "fetch-jsonp";
  * 获取天气
  * https://lbs.amap.com/api/webservice/guide/api/weatherinfo
  */
-// 获取高德地理位置信息
 export const getAdcode = async (key) => {
   return axios({
     method: "GET",
@@ -14,13 +13,21 @@ export const getAdcode = async (key) => {
   });
 };
 
-// 获取高德地理天气信息
 export const getWeather = async (key, city) => {
   return axios({
     method: "GET",
     url: "https://restapi.amap.com/v3/weather/weatherInfo",
     params: { key, city, extensions: "base" },
   });
+};
+
+/**
+ * 获取一言
+ * https://hitokoto.cn/
+ */
+export const getHitokoto = async () => {
+  const res = await fetch("https://v1.hitokoto.cn");
+  return await res.json();
 };
 
 /**
@@ -34,7 +41,6 @@ export const getSearchSuggestions = async (keyWord) => {
     const response = await fetchJsonp(
       `https://suggestion.baidu.com/su?wd=${encodedKeyword}&cb=json`,
       {
-        // 回调参数
         jsonpCallback: "cb",
       },
     );

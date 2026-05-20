@@ -28,9 +28,9 @@ const useSetDataStore = defineStore("setData", {
       // 时间样式
       timeStyle: "one",
       // 显示农历
-      showLunar: false,
+      showLunar: true,
       // 是否显秒
-      showSeconds: false,
+      showSeconds: true,
       // 是否显零
       showZeroTime: true,
       // 12 小时制
